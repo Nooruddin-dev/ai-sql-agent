@@ -1,0 +1,45 @@
+{
+  "DatabaseSchema": [
+    {
+      "TableName": "ActivitiesStudent",
+      "Columns": [
+        {
+          "ColumnName": "ID",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "LastUser",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "ScholasticYearID",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "SchoolID",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "StudentID",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "StudentPositionID",
+          "DataType": "int"
+        },
+        {
+          "ColumnName": "SubActivityID",
+          "DataType": "int"
+        }
+      ],
+      "ForeignKeys": [
+        {
+          "ForeignKeyName": "FK_ActivitiesStudent_LookUpSchoolEducationalSubActivities",
+          "ParentColumn": "SubActivityID",
+          "ReferencedTable": "LookUpSchoolEducationalSubActivities",
+          "ReferencedColumn": "ID"
+        }
+      ]
+    }
+  ]
+}

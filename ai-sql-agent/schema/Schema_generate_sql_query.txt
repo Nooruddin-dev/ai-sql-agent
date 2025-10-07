@@ -1,0 +1,81 @@
+DECLARE @Json NVARCHAR(MAX);
+DECLARE @ChunkCount INT;
+
+;WITH TableColumns AS (
+    SELECT 
+        t.name AS TableName,
+        c.name AS ColumnName,
+        ty.name AS DataType,
+        CASE 
+            WHEN ty.name IN ('nvarchar','varchar','char','nchar') 
+                 THEN '(' + CAST(c.max_length AS VARCHAR(10)) + ')'
+            WHEN ty.name IN ('decimal','numeric') 
+                 THEN '(' + CAST(c.precision AS VARCHAR(10)) + ',' + CAST(c.scale AS VARCHAR(10)) + ')'
+            ELSE ''
+        END AS TypeLength
+    FROM sys.tables t
+    INNER JOIN sys.columns c ON t.object_id = c.object_id
+    INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+),
+TableFKs AS (
+    SELECT 
+        fk.name AS ForeignKeyName,
+        tp.name AS ParentTable,
+        cp.name AS ParentColumn,
+        tr.name AS ReferencedTable,
+        cr.name AS ReferencedColumn
+    FROM sys.foreign_keys fk
+    INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+    INNER JOIN sys.tables tp ON fkc.parent_object_id = tp.object_id
+    INNER JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id
+    INNER JOIN sys.tables tr ON fkc.referenced_object_id = tr.object_id
+    INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
+)
+SELECT @Json = 
+'{' + CHAR(13) + CHAR(10) +
+'  "DatabaseSchema": [' + CHAR(13) + CHAR(10) +
+STUFF((
+    SELECT 
+        ',{' + CHAR(13) + CHAR(10) +
+        '    "TableName": "' + t.name + '",' + CHAR(13) + CHAR(10) +
+        '    "Columns": [' + CHAR(13) + CHAR(10) +
+        STUFF(( 
+            SELECT 
+                ',{ "ColumnName": "' + c.ColumnName + '", "DataType": "' + c.DataType + c.TypeLength + '" }'
+            FROM TableColumns c
+            WHERE c.TableName = t.name
+            ORDER BY c.ColumnName
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') + CHAR(13) + CHAR(10) +
+        '    ],' + CHAR(13) + CHAR(10) +
+        '    "ForeignKeys": [' + CHAR(13) + CHAR(10) +
+        ISNULL(STUFF((
+            SELECT 
+                ',{ "ForeignKeyName": "' + f.ForeignKeyName + '", "ParentColumn": "' + f.ParentColumn + '", "ReferencedTable": "' + f.ReferencedTable + '", "ReferencedColumn": "' + f.ReferencedColumn + '" }'
+            FROM TableFKs f
+            WHERE f.ParentTable = t.name
+            ORDER BY f.ForeignKeyName
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 1, ''), '') + CHAR(13) + CHAR(10) +
+        '    ]' + CHAR(13) + CHAR(10) +
+        '}'
+    FROM sys.tables t
+    ORDER BY t.name
+    FOR XML PATH(''), TYPE
+).value('.', 'NVARCHAR(MAX)'), 1, 1, '') + CHAR(13) + CHAR(10) +
+'  ]' + CHAR(13) + CHAR(10) +
+'}';
+
+-- ✅ calculate number of chunks
+SET @ChunkCount = CEILING(LEN(@Json) / 4000.0);
+
+-- ✅ return JSON in multiple rows (no truncation)
+;WITH Numbers AS (
+    SELECT TOP (@ChunkCount) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+    FROM sys.objects
+)
+SELECT 
+    n AS ChunkId,
+    SUBSTRING(@Json, (n - 1) * 4000 + 1, 4000) AS JsonPart
+FROM Numbers
+ORDER BY n;
